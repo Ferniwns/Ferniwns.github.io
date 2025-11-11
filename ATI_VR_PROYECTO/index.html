@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>WebXR Art Gallery</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+</head>
+<body>
+  <div id="ui-overlay">
+    Move your phone or drag to look around. Tap the VR icon to enter Cardboard mode.
+  </div>
+
+  <a-scene
+    renderer="colorManagement: true"
+    device-orientation-permission-ui="enabled: true"
+    vr-mode-ui="enabled: true">
+    <a-assets id="asset-bank" timeout="10000">
+      <img id="floorTexture" src="./assets/textures/floor.jpg" alt="Floor texture">
+      <img id="wallTexture" src="./assets/textures/wall.jpg" alt="Wall texture">
+      <img id="painting1" src="./assets/textures/cuadro1.jpg" alt="Painting 1">
+      <img id="painting2" src="./assets/textures/cuadro2.jpg" alt="Painting 2">
+    </a-assets>
+
+    <a-entity id="lighting-root"></a-entity>
+    <a-entity id="environment-root"></a-entity>
+    <a-entity id="camera-root"></a-entity>
+    <a-sky id="dynamic-sky" visible="false" color="#111"></a-sky>
+  </a-scene>
+
+  <script src="./js/main.js"></script>
+</body>
+</html>

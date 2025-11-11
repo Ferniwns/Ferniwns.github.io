@@ -1,0 +1,208 @@
+const MODEL_PATH = './assets/models/gallery.glb';
+const SKY_PATH = './assets/sky/sky.jpg';
+
+const assetAvailability = new Map();
+
+window.addEventListener('DOMContentLoaded', () => {
+  const sceneEl = document.querySelector('a-scene');
+  if (!sceneEl) {
+    console.warn('A-Frame scene not found.');
+    return;
+  }
+
+  if (sceneEl.hasLoaded) {
+    initScene();
+  } else {
+    sceneEl.addEventListener('loaded', initScene);
+  }
+});
+
+async function initScene() {
+  setupLights();
+  setupCamera();
+  await setupSky();
+
+  const hasModel = await assetExists(MODEL_PATH);
+  if (hasModel) {
+    loadGalleryModel();
+  } else {
+    buildProceduralGallery();
+  }
+}
+
+async function assetExists(path) {
+  if (assetAvailability.has(path)) {
+    return assetAvailability.get(path);
+  }
+
+  const methods = ['HEAD', 'GET'];
+  for (const method of methods) {
+    const exists = await attemptFetch(path, method);
+    if (exists !== null) {
+      assetAvailability.set(path, exists);
+      return exists;
+    }
+  }
+
+  assetAvailability.set(path, false);
+  return false;
+}
+
+async function attemptFetch(path, method) {
+  try {
+    const response = await fetch(path, { method, cache: 'no-store' });
+    if (response.ok || response.type === 'opaque' || response.status === 0) {
+      return true;
+    }
+    if (response.status === 404) {
+      return false;
+    }
+    if (response.status === 405 && method === 'HEAD') {
+      return null;
+    }
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function setupLights() {
+  const lightingRoot = document.getElementById('lighting-root');
+  if (!lightingRoot) return;
+  clearChildren(lightingRoot);
+
+  const ambient = document.createElement('a-entity');
+  ambient.setAttribute('light', 'type: ambient; intensity: 0.5; color: #ffffff');
+  lightingRoot.appendChild(ambient);
+
+  const directional = document.createElement('a-entity');
+  directional.setAttribute('light', 'type: directional; intensity: 1; castShadow: true');
+  directional.setAttribute('position', '0 4 -2');
+  lightingRoot.appendChild(directional);
+}
+
+function setupCamera() {
+  const cameraRoot = document.getElementById('camera-root');
+  if (!cameraRoot) return;
+  clearChildren(cameraRoot);
+
+  const camera = document.createElement('a-entity');
+  camera.setAttribute('id', 'viewer-camera');
+  camera.setAttribute('camera', 'active: true');
+  camera.setAttribute('look-controls', 'pointerLockEnabled: false; magicWindowTrackingEnabled: true');
+  camera.setAttribute('position', '0 1.6 4');
+
+  if (!isMobileDevice()) {
+    camera.setAttribute('wasd-controls', 'acceleration: 12');
+  }
+
+  cameraRoot.appendChild(camera);
+}
+
+async function setupSky() {
+  const skyEl = document.getElementById('dynamic-sky');
+  if (!skyEl) return;
+
+  const hasSky = await assetExists(SKY_PATH);
+  if (hasSky) {
+    skyEl.setAttribute('src', SKY_PATH);
+  }
+  skyEl.setAttribute('visible', true);
+}
+
+function loadGalleryModel() {
+  const assetsEl = document.getElementById('asset-bank');
+  const environmentRoot = document.getElementById('environment-root');
+  if (!assetsEl || !environmentRoot) return;
+
+  clearChildren(environmentRoot);
+
+  let modelAsset = document.getElementById('galleryModelAsset');
+  if (!modelAsset) {
+    modelAsset = document.createElement('a-asset-item');
+    modelAsset.setAttribute('id', 'galleryModelAsset');
+    modelAsset.setAttribute('src', MODEL_PATH);
+    assetsEl.appendChild(modelAsset);
+  }
+
+  const modelEntity = document.createElement('a-entity');
+  modelEntity.setAttribute('gltf-model', '#galleryModelAsset');
+  modelEntity.setAttribute('position', '0 0 0');
+  modelEntity.setAttribute('shadow', 'cast: true; receive: true');
+  environmentRoot.appendChild(modelEntity);
+}
+
+function buildProceduralGallery() {
+  const environmentRoot = document.getElementById('environment-root');
+  if (!environmentRoot) return;
+
+  clearChildren(environmentRoot);
+
+  const floor = document.createElement('a-plane');
+  floor.setAttribute('rotation', '-90 0 0');
+  floor.setAttribute('position', '0 0 0');
+  floor.setAttribute('width', '14');
+  floor.setAttribute('height', '14');
+  floor.setAttribute('material', 'src: #floorTexture; repeat: 6 6; roughness: 1; metalness: 0.1');
+  environmentRoot.appendChild(floor);
+
+  const walls = [
+    { position: '0 2 -7', rotation: '0 0 0' },
+    { position: '0 2 7', rotation: '0 180 0' },
+    { position: '-7 2 0', rotation: '0 90 0' },
+    { position: '7 2 0', rotation: '0 -90 0' }
+  ];
+
+  walls.forEach((config) => {
+    const wall = document.createElement('a-plane');
+    wall.setAttribute('width', '14');
+    wall.setAttribute('height', '4');
+    wall.setAttribute('material', 'src: #wallTexture; repeat: 4 1; roughness: 0.9');
+    wall.setAttribute('position', config.position);
+    wall.setAttribute('rotation', config.rotation);
+    environmentRoot.appendChild(wall);
+  });
+
+  createPaintings(environmentRoot);
+}
+
+function createPaintings(root) {
+  const paintingData = [
+    { src: '#painting1', position: '-4 2 -6.85', rotation: '0 0 0', size: '2.8 2' },
+    { src: '#painting2', position: '4 2 -6.85', rotation: '0 0 0', size: '2.8 2' },
+    { src: '#painting1', position: '0 2 6.85', rotation: '0 180 0', size: '3.2 2.2' }
+  ];
+
+  paintingData.forEach((data) => {
+    const [width, height] = data.size.split(' ').map(parseFloat);
+    const frame = document.createElement('a-plane');
+    frame.setAttribute('width', width);
+    frame.setAttribute('height', height);
+    frame.setAttribute('material', `color: #000; side: double; shader: flat`);
+    frame.setAttribute('position', data.position);
+    frame.setAttribute('rotation', data.rotation);
+    frame.setAttribute('depth-test', 'false');
+    root.appendChild(frame);
+
+    const painting = document.createElement('a-plane');
+    painting.setAttribute('width', width - 0.2);
+    painting.setAttribute('height', height - 0.2);
+    painting.setAttribute('material', `src: ${data.src}; color: #fff; shader: standard; roughness: 0.4`);
+    painting.setAttribute('position', data.position);
+    painting.setAttribute('rotation', data.rotation);
+    painting.setAttribute('class', 'gallery-painting');
+    painting.setAttribute('shadow', 'receive: false; cast: false');
+    root.appendChild(painting);
+  });
+}
+
+function isMobileDevice() {
+  const ua = navigator.userAgent || '';
+  return /Android|iPhone|iPad|iPod|Mobi|OculusBrowser|Quest|Pico/i.test(ua);
+}
+
+function clearChildren(element) {
+  while (element && element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
