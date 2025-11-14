@@ -3,6 +3,27 @@ const SKY_PATH = './assets/sky/sky.jpg';
 
 const assetAvailability = new Map();
 
+const teleportPoints = [
+  { x: -1.34, z: 5.23 },
+  { x: 1.54, z: 10.00 },
+  { x: -6.77, z: 3.64 }
+];
+
+const TELEPORT_MARKER_HEIGHT = 1.6;
+const TELEPORT_DWELL_MS = 2500;
+
+const teleportState = {
+  markers: [],
+  raycaster: null,
+  rafId: null,
+  dwellTarget: null,
+  dwellStart: 0,
+  controlsReady: false,
+  vrActive: false,
+  tempOrigin: new THREE.Vector3(),
+  tempDirection: new THREE.Vector3()
+};
+
 window.addEventListener('DOMContentLoaded', () => {
   const sceneEl = document.querySelector('a-scene');
   if (!sceneEl) {
@@ -28,6 +49,9 @@ async function initScene() {
   } else {
     buildProceduralGallery();
   }
+
+  setupTeleportMarkers();
+  initializeTeleportController();
 }
 
 async function assetExists(path) {
@@ -194,6 +218,149 @@ function createPaintings(root) {
     painting.setAttribute('shadow', 'receive: false; cast: false');
     root.appendChild(painting);
   });
+}
+
+function setupTeleportMarkers() {
+  const environmentRoot = document.getElementById('environment-root');
+  if (!environmentRoot) return;
+
+  teleportState.markers.forEach((entry) => {
+    if (entry.el && entry.el.parentNode) {
+      entry.el.parentNode.removeChild(entry.el);
+    }
+  });
+  teleportState.markers = [];
+
+  teleportPoints.forEach((point, index) => {
+    const marker = document.createElement('a-sphere');
+    marker.setAttribute('radius', '0.15');
+    marker.setAttribute('color', '#3ad4ff');
+    marker.setAttribute('segments-width', '12');
+    marker.setAttribute('segments-height', '12');
+    marker.setAttribute(
+      'material',
+      'shader: standard; roughness: 0.25; metalness: 0; emissive: #3ad4ff; emissiveIntensity: 0.45'
+    );
+    marker.setAttribute('shadow', 'cast: false; receive: false');
+    marker.setAttribute('position', `${point.x} ${TELEPORT_MARKER_HEIGHT} ${point.z}`);
+    marker.classList.add('teleport-marker');
+    marker.setAttribute('id', `teleport-marker-${index}`);
+    environmentRoot.appendChild(marker);
+    teleportState.markers.push({ el: marker, point });
+  });
+}
+
+function initializeTeleportController() {
+  if (!isMobileDevice() || teleportState.controlsReady) {
+    return;
+  }
+
+  const sceneEl = document.querySelector('a-scene');
+  const cameraEl = document.getElementById('viewer-camera');
+  if (!sceneEl || !cameraEl || teleportState.markers.length === 0) return;
+
+  teleportState.raycaster = teleportState.raycaster || new THREE.Raycaster();
+  if (!teleportState.raycaster) return;
+
+  const handleEnterVR = () => {
+    teleportState.vrActive = true;
+    startTeleportLoop();
+  };
+
+  const handleExitVR = () => {
+    teleportState.vrActive = false;
+    stopTeleportLoop();
+  };
+
+  sceneEl.addEventListener('enter-vr', handleEnterVR);
+  sceneEl.addEventListener('exit-vr', handleExitVR);
+
+  teleportState.controlsReady = true;
+
+  if (sceneEl.is('vr-mode')) {
+    handleEnterVR();
+  }
+}
+
+function startTeleportLoop() {
+  if (teleportState.rafId) return;
+
+  const step = (time) => {
+    updateTeleportGaze(time || performance.now());
+    teleportState.rafId = window.requestAnimationFrame(step);
+  };
+
+  teleportState.rafId = window.requestAnimationFrame(step);
+}
+
+function stopTeleportLoop() {
+  if (teleportState.rafId) {
+    window.cancelAnimationFrame(teleportState.rafId);
+    teleportState.rafId = null;
+  }
+  resetTeleportDwell();
+}
+
+function updateTeleportGaze(currentTime = performance.now()) {
+  if (!teleportState.vrActive || teleportState.markers.length === 0) {
+    resetTeleportDwell();
+    return;
+  }
+
+  const cameraEl = document.getElementById('viewer-camera');
+  if (!cameraEl) return;
+
+  const origin = teleportState.tempOrigin;
+  const direction = teleportState.tempDirection;
+  cameraEl.object3D.getWorldPosition(origin);
+  cameraEl.object3D.getWorldDirection(direction);
+  teleportState.raycaster.set(origin, direction);
+
+  const objects = teleportState.markers.map((entry) => entry.el.object3D);
+  const intersections = teleportState.raycaster.intersectObjects(objects, true);
+  let hitEntry = null;
+
+  if (intersections.length > 0) {
+    const hitEl = intersections[0].object.el;
+    const markerEl =
+      hitEl &&
+      (teleportState.markers.find((entry) => entry.el === hitEl)?.el ||
+        (typeof hitEl.closest === 'function' ? hitEl.closest('.teleport-marker') : null));
+    if (markerEl) {
+      hitEntry = teleportState.markers.find((entry) => entry.el === markerEl) || null;
+    }
+  }
+
+  if (!hitEntry) {
+    resetTeleportDwell();
+    return;
+  }
+
+  if (teleportState.dwellTarget !== hitEntry) {
+    teleportState.dwellTarget = hitEntry;
+    teleportState.dwellStart = currentTime;
+    return;
+  }
+
+  if (currentTime - teleportState.dwellStart >= TELEPORT_DWELL_MS) {
+    performTeleport(hitEntry.point);
+    resetTeleportDwell();
+  }
+}
+
+function performTeleport(target) {
+  const cameraEl = document.getElementById('viewer-camera');
+  if (!cameraEl || !target) return;
+
+  const currentPos = cameraEl.object3D.position;
+  const newY = currentPos.y;
+  cameraEl.object3D.position.set(target.x, newY, target.z);
+  cameraEl.setAttribute('position', `${target.x} ${newY} ${target.z}`);
+}
+
+function resetTeleportDwell() {
+  teleportState.dwellTarget = null;
+  teleportState.dwellStart = 0;
 }
 
 function isMobileDevice() {
