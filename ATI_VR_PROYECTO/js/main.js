@@ -17,15 +17,33 @@ const teleportReticleState = {
   clearedHandler: null,
   tempPosition: new THREE.Vector3()
 };
+let currentHotspot = null;
 
 AFRAME.registerComponent('teleport-to', {
-  schema: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
+  schema: {
+    x: { type: 'number' },
+    y: { type: 'number' },
+    z: { type: 'number' },
+    label: { type: 'string', default: '' },
+    color: { type: 'string', default: '#008CFF' }
+  },
   init() {
     this.handleClick = this.handleClick.bind(this);
     this.handleMouseEnter = this.handleMouseEnter.bind(this);
     this.handleMouseLeave = this.handleMouseLeave.bind(this);
+    this.clearFuseTimer = this.clearFuseTimer.bind(this);
+    this.triggerTeleport = this.triggerTeleport.bind(this);
+    this.visualSphere =
+      this.el.parentElement?.querySelector('.teleport-visual') || this.el.parentElement || null;
+    this.pointData = {
+      x: this.data.x,
+      y: this.data.y,
+      z: this.data.z,
+      label: this.data.label,
+      color: this.data.color
+    };
     this.fuseTimer = null;
-    this.teleportLocked = false;
+    this.pending = false;
 
     this.el.classList.add('teleport-hotspot');
     this.el.addEventListener('click', this.handleClick);
@@ -45,8 +63,9 @@ AFRAME.registerComponent('teleport-to', {
   handleMouseEnter(evt) {
     const cursorEl = evt.detail?.cursorEl;
     const fuseData = cursorEl?.components?.cursor?.data;
-    const fuseEnabled = !!fuseData?.fuse;
-    if (!fuseEnabled) return;
+    if (!fuseData?.fuse) {
+      return;
+    }
 
     const timeout =
       typeof fuseData.fuseTimeout === 'number' && !Number.isNaN(fuseData.fuseTimeout)
@@ -69,15 +88,16 @@ AFRAME.registerComponent('teleport-to', {
     }
   },
   triggerTeleport() {
+    if (this.pending) return;
+    this.pending = true;
     this.clearFuseTimer();
-    if (this.teleportLocked) return;
-    this.teleportLocked = true;
     hideTeleportReticle();
-    const unlock = () => {
-      this.teleportLocked = false;
-    };
 
-    smoothTeleportTo(this.data).then(unlock).catch(unlock);
+    requestTeleport(this.pointData, this.visualSphere)
+      .catch(() => {})
+      .finally(() => {
+        this.pending = false;
+      });
   }
 });
 
@@ -287,33 +307,64 @@ function setupTeleportHotspots() {
   TELEPORT_POINTS.forEach((point) => {
     if (!point?.position) return;
 
-    const hotspotY = 1.6;
+    const sphereY = 1.6;
+    const targetY =
+      typeof point.position.y === 'number' && !Number.isNaN(point.position.y)
+        ? point.position.y
+        : 1.6;
     const hotspotWrapper = document.createElement('a-entity');
     hotspotWrapper.classList.add('teleport-hotspot-wrapper');
-    hotspotWrapper.setAttribute('position', `${point.position.x} ${hotspotY} ${point.position.z}`);
+    hotspotWrapper.setAttribute('position', `${point.position.x} ${sphereY} ${point.position.z}`);
 
+    const color = point.color || '#008CFF';
     const visualSphere = document.createElement('a-sphere');
+    visualSphere.classList.add('teleport-visual');
     visualSphere.setAttribute('geometry', 'primitive: sphere; radius: 0.15');
     visualSphere.setAttribute(
       'material',
-      'color: #39f; opacity: 0.85; shader: flat; transparent: true'
+      `color: ${color}; opacity: 0.85; shader: flat; transparent: true`
     );
     visualSphere.setAttribute('position', '0 0 0');
+    const label = document.createElement('a-entity');
+    label.setAttribute(
+      'text',
+      `value: ${point.label || ''}; align: center; side: double; color: #FFFFFF; width: 2`
+    );
+    label.setAttribute('position', '0 0.4 0');
+    visualSphere.appendChild(label);
 
     const hitboxSphere = document.createElement('a-sphere');
     hitboxSphere.classList.add('teleport-hotspot');
     hitboxSphere.setAttribute('geometry', 'primitive: sphere; radius: 0.4');
     hitboxSphere.setAttribute('material', 'color: #fff; opacity: 0; shader: flat; transparent: true');
     hitboxSphere.setAttribute('position', '0 0 0');
-    hitboxSphere.setAttribute(
-      'teleport-to',
-      `x: ${point.position.x}; y: ${point.position.y}; z: ${point.position.z}`
-    );
+    hitboxSphere.setAttribute('teleport-to', {
+      x: point.position.x,
+      y: targetY,
+      z: point.position.z,
+      label: point.label || '',
+      color
+    });
 
     hotspotWrapper.appendChild(visualSphere);
     hotspotWrapper.appendChild(hitboxSphere);
     environmentRoot.appendChild(hotspotWrapper);
   });
+}
+
+function requestTeleport(pointData, sphereEl) {
+  if (currentHotspot && currentHotspot !== sphereEl) {
+    currentHotspot.setAttribute('visible', true);
+  }
+
+  if (sphereEl) {
+    sphereEl.setAttribute('visible', 'false');
+    currentHotspot = sphereEl;
+  } else {
+    currentHotspot = null;
+  }
+
+  return smoothTeleportTo(pointData);
 }
 
 function setupTeleportReticle(cursorEl) {
