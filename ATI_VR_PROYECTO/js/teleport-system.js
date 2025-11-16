@@ -1,38 +1,37 @@
 (function () {
-  const DWELL_DURATION_MS = 2500;
-  const DEFAULT_CAMERA_HEIGHT = 1.6;
-  const MARKER_RADIUS = 0.35;
-  const MARKER_VISUAL_HEIGHT = 0.05;
+  const TELEPORT_DURATION_MS = 450;
+  const EPSILON = 0.001;
+
+  const config = window.TeleportConfig || {};
+  const teleportPoints = Array.isArray(config.teleportPoints) ? config.teleportPoints : [];
 
   const state = {
     sceneEl: null,
     cameraEl: null,
-    environmentRoot: null,
-    markers: [],
-    raycaster: null,
-    pointer: null,
-    tempOrigin: null,
-    tempDirection: null,
-    dwellTarget: null,
-    dwellStart: 0,
-    gazeRaf: null,
-    canvasClickHandler: null
+    activePoint: null,
+    animationFrame: null,
+    animationStart: 0,
+    startPosition: null,
+    endPosition: null,
+    listeners: new Set(),
+    readyResolve: null
   };
 
-  function boot() {
-    const start = () => {
-      if (Array.isArray(window.TeleportPoints) && window.TeleportPoints.length > 0) {
-        waitForScene();
-      } else {
-        console.warn('TeleportSystem: No teleport points defined. Update js/teleport-config.js to add destinations.');
-      }
-    };
+  const readyPromise = new Promise((resolve) => {
+    state.readyResolve = resolve;
+  });
 
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      start();
-    } else {
-      document.addEventListener('DOMContentLoaded', start, { once: true });
+  function boot() {
+    if (!window.THREE) {
+      console.warn('TeleportSystem: THREE.js is required.');
+      return;
     }
+
+    if (teleportPoints.length === 0) {
+      console.warn('TeleportSystem: No teleport points provided in teleport-config.js');
+    }
+
+    waitForScene();
   }
 
   function waitForScene() {
@@ -43,7 +42,8 @@
     }
 
     state.sceneEl = sceneEl;
-    const proceed = () => waitForCoreEntities();
+    const proceed = () => waitForCamera();
+
     if (sceneEl.hasLoaded) {
       proceed();
     } else {
@@ -51,220 +51,131 @@
     }
   }
 
-  function waitForCoreEntities(attempt = 0) {
+  function waitForCamera(attempt = 0) {
     state.cameraEl = document.getElementById('viewer-camera');
-    state.environmentRoot = document.getElementById('environment-root');
-
-    if (state.cameraEl && state.environmentRoot) {
-      initializeTeleportSystem();
+    if (state.cameraEl) {
+      finalizeReady();
       return;
     }
 
-    if (attempt > 120) {
-      console.warn('TeleportSystem: Camera or environment root not found. Teleport will remain disabled.');
+    if (attempt > 200) {
+      console.warn('TeleportSystem: viewer-camera not found.');
+      finalizeReady();
       return;
     }
 
-    setTimeout(() => waitForCoreEntities(attempt + 1), 100);
+    setTimeout(() => waitForCamera(attempt + 1), 100);
   }
 
-  function initializeTeleportSystem() {
-    if (!ensureThreeHelpers()) {
-      console.warn('TeleportSystem: THREE.js helpers unavailable.');
-      return;
+  function finalizeReady() {
+    if (typeof state.readyResolve === 'function') {
+      state.readyResolve();
+      state.readyResolve = null;
     }
-
-    clearOldMarkers();
-    createMarkers();
-    attachVREvents();
-    attachDesktopClicks();
-
-    window.TeleportSystem = window.TeleportSystem || {};
-    window.TeleportSystem.refreshMarkers = () => {
-      clearOldMarkers();
-      createMarkers();
-    };
   }
 
-  function ensureThreeHelpers() {
-    if (!window.THREE) {
-      return false;
-    }
-
-    state.raycaster = state.raycaster || new THREE.Raycaster();
-    state.pointer = state.pointer || new THREE.Vector2();
-    state.tempOrigin = state.tempOrigin || new THREE.Vector3();
-    state.tempDirection = state.tempDirection || new THREE.Vector3();
-    return !!state.raycaster && !!state.pointer && !!state.tempOrigin && !!state.tempDirection;
-  }
-
-  function clearOldMarkers() {
-    state.markers.forEach((entry) => {
-      if (entry.el && entry.el.parentNode) {
-        entry.el.parentNode.removeChild(entry.el);
+  function notify(point) {
+    state.listeners.forEach((cb) => {
+      try {
+        cb(point || null);
+      } catch (err) {
+        console.error('TeleportSystem listener error:', err);
       }
     });
-    state.markers = [];
   }
 
-  function createMarkers() {
-    const points = Array.isArray(window.TeleportPoints) ? window.TeleportPoints : [];
-    points.forEach((point, index) => {
-      const marker = document.createElement('a-entity');
-      marker.classList.add('teleport-marker');
-      marker.setAttribute('id', `teleport-marker-${index}`);
+  function getPointByName(name) {
+    return teleportPoints.find((point) => point?.name === name) || null;
+  }
 
-      const ring = document.createElement('a-circle');
-      ring.setAttribute('radius', MARKER_RADIUS);
-      ring.setAttribute('rotation', '-90 0 0');
-      ring.setAttribute(
-        'material',
-        'color: #33c6ff; shader: standard; metalness: 0; roughness: 0.2; emissive: #1f89b7; emissiveIntensity: 0.6; opacity: 0.8'
-      );
-      marker.appendChild(ring);
+  function teleportToPoint(point) {
+    if (!point || !state.cameraEl) {
+      return Promise.resolve(false);
+    }
 
-      const inner = document.createElement('a-circle');
-      inner.setAttribute('radius', MARKER_RADIUS * 0.45);
-      inner.setAttribute('rotation', '-90 0 0');
-      inner.setAttribute(
-        'material',
-        'color: #ffffff; shader: flat; opacity: 0.65; side: double'
-      );
-      marker.appendChild(inner);
+    cancelAnimation();
 
-      marker.setAttribute('position', `${point.position?.x ?? 0} ${MARKER_VISUAL_HEIGHT} ${point.position?.z ?? 0}`);
+    const start = state.cameraEl.object3D.position.clone();
+    const target = new THREE.Vector3(
+      typeof point.position?.x === 'number' ? point.position.x : start.x,
+      typeof point.position?.y === 'number' ? point.position.y : start.y,
+      typeof point.position?.z === 'number' ? point.position.z : start.z
+    );
 
-      state.environmentRoot.appendChild(marker);
+    if (start.distanceToSquared(target) <= EPSILON) {
+      setCameraPosition(target);
+      state.activePoint = point;
+      notify(state.activePoint);
+      return Promise.resolve(true);
+    }
 
-      const target = {
-        x: point.position?.x ?? 0,
-        y: typeof point.position?.y === 'number' ? point.position.y : DEFAULT_CAMERA_HEIGHT,
-        z: point.position?.z ?? 0
+    state.animationStart = performance.now();
+    state.startPosition = start;
+    state.endPosition = target;
+    state.activePoint = point;
+
+    return new Promise((resolve) => {
+      const step = (now) => {
+        const elapsed = now - state.animationStart;
+        const t = Math.min(elapsed / TELEPORT_DURATION_MS, 1);
+        const eased = easeInOutQuad(t);
+
+        const current = state.startPosition.clone().lerp(state.endPosition, eased);
+        setCameraPosition(current);
+
+        if (t >= 1) {
+          state.animationFrame = null;
+          notify(state.activePoint);
+          resolve(true);
+          return;
+        }
+
+        state.animationFrame = window.requestAnimationFrame(step);
       };
 
-      state.markers.push({ el: marker, target, name: point.name || `Teleport-${index + 1}` });
-
-      marker.addEventListener('click', () => teleportTo(target));
+      state.animationFrame = window.requestAnimationFrame(step);
     });
   }
 
-  function attachVREvents() {
-    if (!state.sceneEl) return;
+  function setCameraPosition(vec3) {
+    if (!state.cameraEl) return;
+    state.cameraEl.object3D.position.copy(vec3);
+    state.cameraEl.setAttribute('position', `${vec3.x} ${vec3.y} ${vec3.z}`);
+  }
 
-    state.sceneEl.addEventListener('enter-vr', startGazeLoop);
-    state.sceneEl.addEventListener('exit-vr', stopGazeLoop);
-
-    if (state.sceneEl.is('vr-mode')) {
-      startGazeLoop();
+  function cancelAnimation() {
+    if (state.animationFrame) {
+      window.cancelAnimationFrame(state.animationFrame);
+      state.animationFrame = null;
     }
   }
 
-  function startGazeLoop() {
-    if (state.gazeRaf) return;
-
-    const loop = (time) => {
-      runGazeCheck(time || performance.now());
-      state.gazeRaf = window.requestAnimationFrame(loop);
-    };
-    state.gazeRaf = window.requestAnimationFrame(loop);
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
   }
 
-  function stopGazeLoop() {
-    if (state.gazeRaf) {
-      window.cancelAnimationFrame(state.gazeRaf);
-      state.gazeRaf = null;
-    }
-    resetDwell();
+  function teleportToName(name) {
+    const point = getPointByName(name);
+    if (!point) return Promise.resolve(false);
+    return teleportToPoint(point);
   }
 
-  function runGazeCheck(time) {
-    if (!state.cameraEl || !state.raycaster || state.markers.length === 0) {
-      resetDwell();
-      return;
+  function onTeleport(callback) {
+    if (typeof callback !== 'function') {
+      return () => {};
     }
-
-    state.cameraEl.object3D.getWorldPosition(state.tempOrigin);
-    state.cameraEl.object3D.getWorldDirection(state.tempDirection);
-    state.raycaster.set(state.tempOrigin, state.tempDirection);
-
-    const hitEntry = getFirstMarkerHit(state.raycaster);
-    if (!hitEntry) {
-      resetDwell();
-      return;
-    }
-
-    if (state.dwellTarget !== hitEntry) {
-      state.dwellTarget = hitEntry;
-      state.dwellStart = time;
-      return;
-    }
-
-    if (time - state.dwellStart >= DWELL_DURATION_MS) {
-      teleportTo(hitEntry.target);
-      resetDwell();
-    }
+    state.listeners.add(callback);
+    return () => state.listeners.delete(callback);
   }
 
-  function resetDwell() {
-    state.dwellTarget = null;
-    state.dwellStart = 0;
-  }
-
-  function attachDesktopClicks() {
-    if (!state.sceneEl) return;
-    const canvas = state.sceneEl.canvas;
-    if (!canvas) {
-      state.sceneEl.addEventListener('render-target-loaded', attachDesktopClicks, { once: true });
-      return;
-    }
-
-    if (state.canvasClickHandler) {
-      canvas.removeEventListener('click', state.canvasClickHandler);
-    }
-
-    state.canvasClickHandler = (event) => {
-      if (!state.cameraEl || !state.raycaster || state.markers.length === 0) return;
-
-      const rect = canvas.getBoundingClientRect();
-      state.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      state.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      const threeCamera = state.cameraEl.getObject3D('camera');
-      if (!threeCamera) return;
-
-      state.raycaster.setFromCamera(state.pointer, threeCamera);
-      const hitEntry = getFirstMarkerHit(state.raycaster);
-      if (hitEntry) {
-        teleportTo(hitEntry.target);
-      }
-    };
-
-    canvas.addEventListener('click', state.canvasClickHandler);
-  }
-
-  function getFirstMarkerHit(raycaster) {
-    const objects = state.markers.map((entry) => entry.el.object3D);
-    const intersections = raycaster.intersectObjects(objects, true);
-    if (intersections.length === 0) {
-      return null;
-    }
-
-    const hitEl = intersections[0].object.el;
-    const markerEl =
-      hitEl &&
-      (state.markers.find((entry) => entry.el === hitEl)?.el ||
-        (typeof hitEl.closest === 'function' ? hitEl.closest('.teleport-marker') : null));
-
-    if (!markerEl) return null;
-    return state.markers.find((entry) => entry.el === markerEl) || null;
-  }
-
-  function teleportTo(target) {
-    if (!state.cameraEl || !target) return;
-    const newY = typeof target.y === 'number' ? target.y : state.cameraEl.object3D.position.y;
-    state.cameraEl.object3D.position.set(target.x, newY, target.z);
-    state.cameraEl.setAttribute('position', `${target.x} ${newY} ${target.z}`);
-  }
+  window.TeleportSystem = {
+    ready: () => readyPromise,
+    getPoints: () => teleportPoints.map((point) => ({ ...point })),
+    teleportToName,
+    teleportToPoint,
+    getActivePoint: () => (state.activePoint ? { ...state.activePoint } : null),
+    onTeleport
+  };
 
   boot();
 })();
