@@ -10,6 +10,13 @@ const teleportStart = new THREE.Vector3();
 const teleportEnd = new THREE.Vector3();
 const teleportCurrent = new THREE.Vector3();
 let teleportAnimationFrame = null;
+const teleportReticleState = {
+  el: null,
+  cursorEl: null,
+  intersectionHandler: null,
+  clearedHandler: null,
+  tempPosition: new THREE.Vector3()
+};
 
 AFRAME.registerComponent('teleport-to', {
   schema: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
@@ -65,10 +72,12 @@ AFRAME.registerComponent('teleport-to', {
     this.clearFuseTimer();
     if (this.teleportLocked) return;
     this.teleportLocked = true;
-    smoothTeleportTo(this.data);
-    setTimeout(() => {
+    hideTeleportReticle();
+    const unlock = () => {
       this.teleportLocked = false;
-    }, 120);
+    };
+
+    smoothTeleportTo(this.data).then(unlock).catch(unlock);
   }
 });
 
@@ -163,6 +172,9 @@ function setupCamera() {
   if (cursor) {
     cursor.setAttribute('cursor', 'fuse: true; fuseTimeout: 1500');
     cursor.setAttribute('raycaster', 'objects: .teleport-hotspot');
+    setupTeleportReticle(cursor);
+  } else {
+    setupTeleportReticle(null);
   }
 }
 
@@ -269,36 +281,112 @@ function setupTeleportHotspots() {
     return;
   }
 
-  const existing = environmentRoot.querySelectorAll('.teleport-hotspot');
+  const existing = environmentRoot.querySelectorAll('.teleport-hotspot-wrapper');
   existing.forEach((hotspot) => hotspot.parentNode?.removeChild(hotspot));
 
   TELEPORT_POINTS.forEach((point) => {
     if (!point?.position) return;
 
-    const hotspot = document.createElement('a-cylinder');
-    hotspot.classList.add('teleport-hotspot');
-    hotspot.setAttribute('radius', '0.25');
-    hotspot.setAttribute('height', '0.02');
-    hotspot.setAttribute(
+    const hotspotY = 1.6;
+    const hotspotWrapper = document.createElement('a-entity');
+    hotspotWrapper.classList.add('teleport-hotspot-wrapper');
+    hotspotWrapper.setAttribute('position', `${point.position.x} ${hotspotY} ${point.position.z}`);
+
+    const visualSphere = document.createElement('a-sphere');
+    visualSphere.setAttribute('geometry', 'primitive: sphere; radius: 0.15');
+    visualSphere.setAttribute(
       'material',
-      'color: #3ad4ff; shader: standard; metalness: 0; roughness: 0.4; emissive: #1a6fb4; emissiveIntensity: 0.45'
+      'color: #39f; opacity: 0.85; shader: flat; transparent: true'
     );
-    const hotspotY =
-      Math.max(typeof point.position.y === 'number' ? point.position.y : 0, 1);
-    hotspot.setAttribute('position', `${point.position.x} ${hotspotY} ${point.position.z}`);
-    hotspot.setAttribute('rotation', '0 0 0');
-    hotspot.setAttribute(
+    visualSphere.setAttribute('position', '0 0 0');
+
+    const hitboxSphere = document.createElement('a-sphere');
+    hitboxSphere.classList.add('teleport-hotspot');
+    hitboxSphere.setAttribute('geometry', 'primitive: sphere; radius: 0.4');
+    hitboxSphere.setAttribute('material', 'color: #fff; opacity: 0; shader: flat; transparent: true');
+    hitboxSphere.setAttribute('position', '0 0 0');
+    hitboxSphere.setAttribute(
       'teleport-to',
       `x: ${point.position.x}; y: ${point.position.y}; z: ${point.position.z}`
     );
 
-    environmentRoot.appendChild(hotspot);
+    hotspotWrapper.appendChild(visualSphere);
+    hotspotWrapper.appendChild(hitboxSphere);
+    environmentRoot.appendChild(hotspotWrapper);
   });
+}
+
+function setupTeleportReticle(cursorEl) {
+  const environmentRoot = document.getElementById('environment-root');
+
+  if (teleportReticleState.cursorEl) {
+    teleportReticleState.cursorEl.removeEventListener(
+      'raycaster-intersection',
+      teleportReticleState.intersectionHandler
+    );
+    teleportReticleState.cursorEl.removeEventListener(
+      'raycaster-intersection-cleared',
+      teleportReticleState.clearedHandler
+    );
+    teleportReticleState.cursorEl = null;
+  }
+
+  if (!environmentRoot || !cursorEl) {
+    hideTeleportReticle();
+    return;
+  }
+
+  let reticle = teleportReticleState.el;
+  if (!reticle || !reticle.parentNode) {
+    reticle = document.createElement('a-ring');
+    reticle.setAttribute('id', 'teleport-reticle');
+    reticle.setAttribute('rotation', '-90 0 0');
+    reticle.setAttribute('radius-inner', '0.05');
+    reticle.setAttribute('radius-outer', '0.09');
+    reticle.setAttribute('material', 'color: #39f; opacity: 0.75; shader: flat; transparent: true');
+    reticle.setAttribute('visible', 'false');
+    environmentRoot.appendChild(reticle);
+    teleportReticleState.el = reticle;
+  }
+
+  const intersectionHandler = (evt) => handleTeleportReticleIntersection(evt);
+  const clearedHandler = () => hideTeleportReticle();
+
+  cursorEl.addEventListener('raycaster-intersection', intersectionHandler);
+  cursorEl.addEventListener('raycaster-intersection-cleared', clearedHandler);
+
+  teleportReticleState.cursorEl = cursorEl;
+  teleportReticleState.intersectionHandler = intersectionHandler;
+  teleportReticleState.clearedHandler = clearedHandler;
+}
+
+function handleTeleportReticleIntersection(evt) {
+  const intersections = evt.detail?.els || [];
+  const hotspot = intersections.find((el) => el?.classList?.contains('teleport-hotspot'));
+  if (hotspot) {
+    updateTeleportReticlePosition(hotspot);
+  } else {
+    hideTeleportReticle();
+  }
+}
+
+function updateTeleportReticlePosition(targetEl) {
+  if (!teleportReticleState.el || !targetEl?.object3D) return;
+  targetEl.object3D.getWorldPosition(teleportReticleState.tempPosition);
+  const pos = teleportReticleState.tempPosition;
+  teleportReticleState.el.setAttribute('position', `${pos.x} ${pos.y - 0.15} ${pos.z}`);
+  teleportReticleState.el.setAttribute('visible', 'true');
+}
+
+function hideTeleportReticle() {
+  if (teleportReticleState.el) {
+    teleportReticleState.el.setAttribute('visible', 'false');
+  }
 }
 
 function smoothTeleportTo(target) {
   const rigEl = document.getElementById('rig');
-  if (!rigEl) return;
+  if (!rigEl) return Promise.resolve();
 
   const rigObj = rigEl.object3D;
   teleportStart.copy(rigObj.position);
@@ -311,23 +399,26 @@ function smoothTeleportTo(target) {
 
   const startTime = performance.now();
 
-  const step = (now) => {
-    const elapsed = now - startTime;
-    const t = Math.min(elapsed / TELEPORT_ANIMATION_DURATION, 1);
-    const eased = easeInOutQuad(t);
+  return new Promise((resolve) => {
+    const step = (now) => {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / TELEPORT_ANIMATION_DURATION, 1);
+      const eased = easeInOutQuad(t);
 
-    teleportCurrent.copy(teleportStart).lerp(teleportEnd, eased);
-    rigObj.position.copy(teleportCurrent);
-    rigEl.setAttribute('position', `${teleportCurrent.x} ${teleportCurrent.y} ${teleportCurrent.z}`);
+      teleportCurrent.copy(teleportStart).lerp(teleportEnd, eased);
+      rigObj.position.copy(teleportCurrent);
+      rigEl.setAttribute('position', `${teleportCurrent.x} ${teleportCurrent.y} ${teleportCurrent.z}`);
 
-    if (t < 1) {
-      teleportAnimationFrame = requestAnimationFrame(step);
-    } else {
-      teleportAnimationFrame = null;
-    }
-  };
+      if (t < 1) {
+        teleportAnimationFrame = requestAnimationFrame(step);
+      } else {
+        teleportAnimationFrame = null;
+        resolve();
+      }
+    };
 
-  teleportAnimationFrame = requestAnimationFrame(step);
+    teleportAnimationFrame = requestAnimationFrame(step);
+  });
 }
 
 function easeInOutQuad(t) {
