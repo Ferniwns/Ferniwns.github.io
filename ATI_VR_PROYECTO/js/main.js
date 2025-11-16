@@ -1,7 +1,23 @@
+import { TELEPORT_POINTS } from './teleport-points.js';
+
 const MODEL_PATH = './assets/models/gallery.glb';
 const SKY_PATH = './assets/sky/sky.jpg';
+const TELEPORT_ANIMATION_DURATION = 600;
 
 const assetAvailability = new Map();
+const teleportStart = new THREE.Vector3();
+const teleportEnd = new THREE.Vector3();
+const teleportCurrent = new THREE.Vector3();
+let teleportAnimationFrame = null;
+
+AFRAME.registerComponent('teleport-to', {
+  schema: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
+  init() {
+    this.el.addEventListener('click', () => {
+      smoothTeleportTo(this.data);
+    });
+  }
+});
 
 window.addEventListener('DOMContentLoaded', () => {
   const sceneEl = document.querySelector('a-scene');
@@ -29,6 +45,7 @@ async function initScene() {
     buildProceduralGallery();
   }
 
+  setupTeleportHotspots();
 }
 
 async function assetExists(path) {
@@ -83,21 +100,17 @@ function setupLights() {
 }
 
 function setupCamera() {
-  const cameraRoot = document.getElementById('camera-root');
-  if (!cameraRoot) return;
-  clearChildren(cameraRoot);
+  const rig = document.getElementById('rig');
+  if (!rig) return;
 
-  const camera = document.createElement('a-entity');
-  camera.setAttribute('id', 'viewer-camera');
-  camera.setAttribute('camera', 'active: true');
-  camera.setAttribute('look-controls', 'pointerLockEnabled: false; magicWindowTrackingEnabled: true');
-  camera.setAttribute('position', '0 1.6 4');
+  rig.setAttribute('camera', 'active: true');
+  rig.setAttribute('look-controls', 'pointerLockEnabled: false; magicWindowTrackingEnabled: true');
 
-  if (!isMobileDevice()) {
-    camera.setAttribute('wasd-controls', 'acceleration: 12');
+  const cursor = rig.querySelector('[cursor]');
+  if (cursor) {
+    cursor.setAttribute('cursor', 'fuse: true; fuseTimeout: 2500');
+    cursor.setAttribute('raycaster', 'objects: .teleport-hotspot');
   }
-
-  cameraRoot.appendChild(camera);
 }
 
 async function setupSky() {
@@ -197,10 +210,73 @@ function createPaintings(root) {
   });
 }
 
+function setupTeleportHotspots() {
+  const environmentRoot = document.getElementById('environment-root');
+  if (!environmentRoot || !Array.isArray(TELEPORT_POINTS)) {
+    return;
+  }
 
-function isMobileDevice() {
-  const ua = navigator.userAgent || '';
-  return /Android|iPhone|iPad|iPod|Mobi|OculusBrowser|Quest|Pico/i.test(ua);
+  const existing = environmentRoot.querySelectorAll('.teleport-hotspot');
+  existing.forEach((hotspot) => hotspot.parentNode?.removeChild(hotspot));
+
+  TELEPORT_POINTS.forEach((point) => {
+    if (!point?.position) return;
+
+    const hotspot = document.createElement('a-cylinder');
+    hotspot.classList.add('teleport-hotspot');
+    hotspot.setAttribute('radius', '0.25');
+    hotspot.setAttribute('height', '0.02');
+    hotspot.setAttribute(
+      'material',
+      'color: #3ad4ff; shader: standard; metalness: 0; roughness: 0.4; emissive: #1a6fb4; emissiveIntensity: 0.45'
+    );
+    hotspot.setAttribute('position', `${point.position.x} 0 ${point.position.z}`);
+    hotspot.setAttribute('rotation', '0 0 0');
+    hotspot.setAttribute(
+      'teleport-to',
+      `x: ${point.position.x}; y: ${point.position.y}; z: ${point.position.z}`
+    );
+
+    environmentRoot.appendChild(hotspot);
+  });
+}
+
+function smoothTeleportTo(target) {
+  const rigEl = document.getElementById('rig');
+  if (!rigEl) return;
+
+  const rigObj = rigEl.object3D;
+  teleportStart.copy(rigObj.position);
+  teleportEnd.set(target.x, target.y, target.z);
+
+  if (teleportAnimationFrame) {
+    cancelAnimationFrame(teleportAnimationFrame);
+    teleportAnimationFrame = null;
+  }
+
+  const startTime = performance.now();
+
+  const step = (now) => {
+    const elapsed = now - startTime;
+    const t = Math.min(elapsed / TELEPORT_ANIMATION_DURATION, 1);
+    const eased = easeInOutQuad(t);
+
+    teleportCurrent.copy(teleportStart).lerp(teleportEnd, eased);
+    rigObj.position.copy(teleportCurrent);
+    rigEl.setAttribute('position', `${teleportCurrent.x} ${teleportCurrent.y} ${teleportCurrent.z}`);
+
+    if (t < 1) {
+      teleportAnimationFrame = requestAnimationFrame(step);
+    } else {
+      teleportAnimationFrame = null;
+    }
+  };
+
+  teleportAnimationFrame = requestAnimationFrame(step);
+}
+
+function easeInOutQuad(t) {
+  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 }
 
 function clearChildren(element) {
