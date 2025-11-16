@@ -3,6 +3,7 @@ import { TELEPORT_POINTS } from './teleport-points.js';
 const MODEL_PATH = './assets/models/gallery.glb';
 const SKY_PATH = './assets/sky/sky.jpg';
 const TELEPORT_ANIMATION_DURATION = 600;
+const DEFAULT_FUSE_TIMEOUT = 1500;
 
 const assetAvailability = new Map();
 const teleportStart = new THREE.Vector3();
@@ -13,9 +14,61 @@ let teleportAnimationFrame = null;
 AFRAME.registerComponent('teleport-to', {
   schema: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
   init() {
-    this.el.addEventListener('click', () => {
-      smoothTeleportTo(this.data);
-    });
+    this.handleClick = this.handleClick.bind(this);
+    this.handleMouseEnter = this.handleMouseEnter.bind(this);
+    this.handleMouseLeave = this.handleMouseLeave.bind(this);
+    this.fuseTimer = null;
+    this.teleportLocked = false;
+
+    this.el.classList.add('teleport-hotspot');
+    this.el.addEventListener('click', this.handleClick);
+    this.el.addEventListener('mouseenter', this.handleMouseEnter);
+    this.el.addEventListener('mouseleave', this.handleMouseLeave);
+  },
+  remove() {
+    this.el.removeEventListener('click', this.handleClick);
+    this.el.removeEventListener('mouseenter', this.handleMouseEnter);
+    this.el.removeEventListener('mouseleave', this.handleMouseLeave);
+    this.clearFuseTimer();
+  },
+  handleClick() {
+    this.clearFuseTimer();
+    this.triggerTeleport();
+  },
+  handleMouseEnter(evt) {
+    const cursorEl = evt.detail?.cursorEl;
+    const fuseData = cursorEl?.components?.cursor?.data;
+    const fuseEnabled = !!fuseData?.fuse;
+    if (!fuseEnabled) return;
+
+    const timeout =
+      typeof fuseData.fuseTimeout === 'number' && !Number.isNaN(fuseData.fuseTimeout)
+        ? fuseData.fuseTimeout
+        : DEFAULT_FUSE_TIMEOUT;
+
+    this.clearFuseTimer();
+    this.fuseTimer = setTimeout(() => {
+      this.fuseTimer = null;
+      this.triggerTeleport();
+    }, timeout);
+  },
+  handleMouseLeave() {
+    this.clearFuseTimer();
+  },
+  clearFuseTimer() {
+    if (this.fuseTimer) {
+      clearTimeout(this.fuseTimer);
+      this.fuseTimer = null;
+    }
+  },
+  triggerTeleport() {
+    this.clearFuseTimer();
+    if (this.teleportLocked) return;
+    this.teleportLocked = true;
+    smoothTeleportTo(this.data);
+    setTimeout(() => {
+      this.teleportLocked = false;
+    }, 120);
   }
 });
 
@@ -108,7 +161,7 @@ function setupCamera() {
 
   const cursor = rig.querySelector('[cursor]');
   if (cursor) {
-    cursor.setAttribute('cursor', 'fuse: true; fuseTimeout: 2500');
+    cursor.setAttribute('cursor', 'fuse: true; fuseTimeout: 1500');
     cursor.setAttribute('raycaster', 'objects: .teleport-hotspot');
   }
 }
@@ -230,7 +283,9 @@ function setupTeleportHotspots() {
       'material',
       'color: #3ad4ff; shader: standard; metalness: 0; roughness: 0.4; emissive: #1a6fb4; emissiveIntensity: 0.45'
     );
-    hotspot.setAttribute('position', `${point.position.x} 0 ${point.position.z}`);
+    const hotspotY =
+      Math.max(typeof point.position.y === 'number' ? point.position.y : 0, 1);
+    hotspot.setAttribute('position', `${point.position.x} ${hotspotY} ${point.position.z}`);
     hotspot.setAttribute('rotation', '0 0 0');
     hotspot.setAttribute(
       'teleport-to',
