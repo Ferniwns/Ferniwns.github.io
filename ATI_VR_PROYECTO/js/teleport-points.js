@@ -1,7 +1,7 @@
 export const TELEPORT_POINTS = [
   {
     room: 'uno',
-    position: { x: 0, y: 0.6, z: 0 },
+    position: { x: -3, y: 1.6, z: -3 },
     teleportTarget: { x: 0, y: 1.6, z: 0 },
     color: '#FF7A18',
     label: 'Hallway',
@@ -10,7 +10,7 @@ export const TELEPORT_POINTS = [
   },
   {
     room: 'dos',
-    position: { x: 0.5, y: 1, z: 0.5 },
+    position: { x: 0.5, y: 1, z: 1.5 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
     color: '#FF7A18',
     label: 'Hallway',
@@ -19,7 +19,7 @@ export const TELEPORT_POINTS = [
   },
   {
     room: 'tres',
-    position: { x: 1, y: 1.6, z: 1 },
+    position: { x: -5.4, y: 1.6, z: 1 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
     color: '#FF7A18',
     label: 'Hallway',
@@ -28,7 +28,7 @@ export const TELEPORT_POINTS = [
   },
   {
     room: 'cuatro',
-    position: { x: 1, y: 1.6, z: 1 },
+    position: { x: -2, y: -4.2, z: 1.6 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
     color: '#FF7A18',
     label: 'Hallway',
