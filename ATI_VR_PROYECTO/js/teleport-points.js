@@ -1,55 +1,116 @@
 export const TELEPORT_POINTS = [
   {
     room: 'uno',
-    position: { x: -3, y: 1.6, z: 3 }, //Z VA INVERSO!!
+    position: { x: -3, y: 1.6, z: 2.6 }, //Z VA INVERSO y es Y!!
     teleportTarget: { x: 0, y: 1.6, z: 0 },
-    color: '#FF7A18',
+    color: '#e418ffff',
     label: '',
     movesToOtherRoom: true,
     targetRoom: 'dos'
   },
   {
     room: 'dos',
-    position: { x: 0.5, y: 1, z: 1.5 },
+    position: { x: 0.5, y: 1, z: -11 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
-    color: '#FF7A18',
-    label: 'Hallway',
+    color: '#ff18ffff',
+    label: '',
     movesToOtherRoom: true,
     targetRoom: 'tres'
   },
   {
+    room: 'dos',
+    position: { x: -2, y: 1.6, z: 4.3 },
+    teleportTarget: { x: -2, y: 1.6, z: 4.3 },
+    color: '#1869ffff',
+    label: '',
+    movesToOtherRoom: false,
+
+  },
+  {
+    room: 'dos',
+    position: { x: 3.5, y: 1.6, z: 5.1 },
+    teleportTarget: { x: 3.5, y: 1.6, z: 5.1  },
+    color: '#1869ffff',
+    label: '',
+    movesToOtherRoom: false,
+
+  },
+  {
+    room: 'dos',
+    position: { x: 3.5, y: 1.6, z: -1 },
+    teleportTarget: { x: 3.5, y: 1.6, z: -1  },
+    color: '#1869ffff',
+    label: '',
+    movesToOtherRoom: false,
+
+  },
+  {
+    room: 'dos',
+    position: { x: 3.5, y: 1.6, z: -11 },
+    teleportTarget: { x: 3.5, y: 1.6, z: -11  },
+    color: '#1869ffff',
+    label: '',
+    movesToOtherRoom: false,
+
+  },
+    {
+    room: 'dos',
+    position: { x: -1.7, y: 1.6, z: -11 },
+    teleportTarget: { x: -1.7, y: 1.6, z: -11  },
+    color: '#1869ffff',
+    label: '',
+    movesToOtherRoom: false,
+
+  },
+  {
     room: 'tres',
-    position: { x: -5.4, y: 1.6, z: 1 },
+    position: { x: -4, y: 1.6, z: 0 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
-    color: '#FF7A18',
-    label: 'Hallway',
+    color: '#ee22eeff',
+    label: '',
     movesToOtherRoom: true,
     targetRoom: 'cuatro'
   },  
   {
     room: 'cuatro',
-    position: { x: -2, y: -4.2, z: 1.6 },
+    position: { x: -1, y: 1, z: 3 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
-    color: '#FF7A18',
-    label: 'Hallway',
+    color: '#ff18d8ff',
+    label: '',
     movesToOtherRoom: true,
     targetRoom: 'cinco'
   },
+    {
+    room: 'cuatro',
+    position: { x: 7, y: 1.6, z: 1 },
+    teleportTarget: { x: 7, y: 1.6, z: 3  },
+    color: '#181cffff',
+    label: '',
+    movesToOtherRoom: false,
+  },
+  {
+    room: 'cuatro',
+    position: { x: 7, y: 1.6, z: -3 },
+    teleportTarget: { x: 7, y: 1.6, z: -3  },
+    color: '#181cffff',
+    label: '',
+    movesToOtherRoom: false,
+  },
   {
     room: 'cinco',
-    position: { x: 1, y: 1.6, z: 1 },
+    position: { x: -4, y: 1.6, z: -1.5 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
-    color: '#FF7A18',
-    label: 'Hallway',
+    color: '#ed16f5ff',
+    label: '',
     movesToOtherRoom: true,
     targetRoom: 'seis'
   },
   {
     room: 'seis',
-    position: { x: 1, y: 1.6, z: 1 },
+    position: { x: 2.5, y: 1.5, z: 1.2 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
-    color: '#FF7A18',
-    label: 'Hallway',
+    color: '#be18ffff',
+    label: '',
     movesToOtherRoom: true,
     targetRoom: 'uno'
   },
