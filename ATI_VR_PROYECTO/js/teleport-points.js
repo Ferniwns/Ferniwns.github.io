@@ -1,7 +1,7 @@
 export const TELEPORT_POINTS = [
   {
     room: 'uno',
-    position: { x: 1, y: 1.6, z: 1 },
+    position: { x: 0.1, y: 1.6, z: 0.1 },
     teleportTarget: { x: 0, y: 1.6, z: 0 },
     color: '#FF7A18',
     label: 'Hallway',
