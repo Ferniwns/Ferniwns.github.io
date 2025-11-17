@@ -20,7 +20,7 @@ export const TELEPORT_POINTS = [
   {
     room: 'dos',
     position: { x: -1, y: 1.6, z: 4.3 },
-    teleportTarget: { x: -2, y: 1.6, z: 4.3 },
+    teleportTarget: { x: -1, y: 1.6, z: 4.3 },
     color: '#00AFFF',
     label: '',
     movesToOtherRoom: true,
