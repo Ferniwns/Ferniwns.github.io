@@ -1,10 +1,10 @@
 export const TELEPORT_POINTS = [
   {
     room: 'uno',
-    position: { x: -3, y: 1.6, z: -3 },
+    position: { x: -3, y: 1.6, z: 3 }, //Z VA INVERSO!!
     teleportTarget: { x: 0, y: 1.6, z: 0 },
     color: '#FF7A18',
-    label: 'Hallway',
+    label: '',
     movesToOtherRoom: true,
     targetRoom: 'dos'
   },
@@ -25,7 +25,7 @@ export const TELEPORT_POINTS = [
     label: 'Hallway',
     movesToOtherRoom: true,
     targetRoom: 'cuatro'
-  },
+  },  
   {
     room: 'cuatro',
     position: { x: -2, y: -4.2, z: 1.6 },
