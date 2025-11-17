@@ -1,8 +1,8 @@
 export const ROOMS = {
-  gallery1: { glb: './assets/models/UNO.glb' },
-  gallery2: { glb: './assets/models/DOSglb' },
-  gallery3: { glb: './assets/models/TRES.glb' },
-  gallery4: { glb: './assets/models/CUATRO.glb' },
-  gallery5: { glb: './assets/models/CINCO.glb' },
-  gallery6: { glb: './assets/models/SEIS.glb' }
+  gallery1: { glb: './assets/models/uno.glb' },
+  gallery2: { glb: './assets/models/dosglb' },
+  gallery3: { glb: './assets/models/tres.glb' },
+  gallery4: { glb: './assets/models/cuatro.glb' },
+  gallery5: { glb: './assets/models/cinco.glb' },
+  gallery6: { glb: './assets/models/seis.glb' }
 };
