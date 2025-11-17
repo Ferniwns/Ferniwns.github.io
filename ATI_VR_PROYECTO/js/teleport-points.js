@@ -9,8 +9,8 @@ export const TELEPORT_POINTS = [
     targetRoom: 'dos'
   },
   {
-    room: 'uno',
-    position: { x: 0, y: 0.2, z: 0 },
+    room: 'dos',
+    position: { x: 0, y: 1.6, z: 0 },
     teleportTarget: { x: 0, y: 1.6, z: 0  },
     color: '#FF7A18',
     label: 'Hallway',
