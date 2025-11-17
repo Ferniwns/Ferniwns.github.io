@@ -47,7 +47,7 @@ export const TELEPORT_POINTS = [
   {
     room: 'dos',
     position: { x: 3.5, y: 1.6, z: 11 },
-    teleportTarget: { x: 3.5, y: 1.6, z: -11  },
+    teleportTarget: { x: 3.5, y: 1.6, z: 11  },
     color: '#00AFFF',
     label: '',
     movesToOtherRoom: true,
@@ -55,8 +55,8 @@ export const TELEPORT_POINTS = [
   },
     {
     room: 'dos',
-    position: { x: -1.7, y: 1.6, z: -11 },
-    teleportTarget: { x: -1.7, y: 1.6, z: -11  },
+    position: { x: -1.7, y: 1.6, z: 11 },
+    teleportTarget: { x: -1.7, y: 1.6, z: 11  },
     color: '#00AFFF',
     label: '',
     movesToOtherRoom: true,
@@ -83,7 +83,7 @@ export const TELEPORT_POINTS = [
     {
     room: 'cuatro',
     position: { x: 7, y: 1.6, z: 1 },
-    teleportTarget: { x: 7, y: 1.6, z: 3  },
+    teleportTarget: { x: 7, y: 1.6, z: 1  },
     color: '#00AFFF',
     label: '',
     movesToOtherRoom: true,
